@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- SEO & Metadata -->
+  <title>LockSense — Smart Locker Monitoring & 3D Spatial Telemetry</title>
+  <meta name="description" content="Real-time IoT monitoring and interactive 3D digital twin for ESP32 smart lockers. Track connection, door state, live open duration, and activity history." />
+  <meta name="robots" content="noindex, nofollow" />
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Three.js r128 for Interactive 3D Locker Digital Twin -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/reset.css" />
+  <link rel="stylesheet" href="css/variables.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/table.css" />
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <!-- ── SIDEBAR NAVIGATION ─────────────────────────────────── -->
+    <aside class="sidebar">
+      <!-- Brand Header -->
+      <div class="sidebar-brand">
+        <a href="#/overview" class="sidebar-brand-inner">
+          <img src="LockSense-logo.png" alt="LockSense" class="sidebar-logo-img" />
+        </a>
+      </div>
+
+      <!-- Navigation Links (Only 3: Overview, Manage, Logs) -->
+      <nav class="sidebar-nav" aria-label="Main navigation">
+        <div class="sidebar-nav-heading">Core Navigation</div>
+
+        <a class="nav-item active" id="nav-overview" href="#/overview">
+          <span class="nav-item-left">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+            </svg>
+            <span>Dashboard Overview</span>
+          </span>
+        </a>
+
+        <a class="nav-item" id="nav-lockers" href="#/lockers">
+          <span class="nav-item-left">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <span>Manage Lockers</span>
+          </span>
+        </a>
+
+        <a class="nav-item" id="nav-logs" href="#/logs">
+          <span class="nav-item-left">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+              <rect x="9" y="3" width="6" height="4" rx="1"/>
+              <line x1="9" y1="12" x2="15" y2="12"/>
+              <line x1="9" y1="16" x2="13" y2="16"/>
+            </svg>
+            <span>Activity Logs</span>
+          </span>
+        </a>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <div class="sidebar-footer-row">
+          <span class="sidebar-copyright">© LockSense 2026</span>
+          <span class="sidebar-version">Version 1.0</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── TOP HEADER ───────────────────────────────────────── -->
+    <header class="header">
+      <div class="header-left">
+        <h1 class="header-title" id="header-title">Dashboard Overview</h1>
+      </div>
+
+      <div class="header-right">
+        <!-- Database Connection Indicator -->
+        <div class="conn-pill" aria-live="polite">
+          <span class="conn-indicator-dot">
+            <span class="conn-ping" id="conn-ping"></span>
+            <span class="conn-dot" id="conn-dot"></span>
+          </span>
+          <span id="conn-label">Connecting…</span>
+        </div>
+
+        <!-- Live Clock -->
+        <div class="clock-pill" aria-label="Current time">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span id="live-clock">--:--:--</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── PROPPED-OPEN ALERT BANNER ─────────────────────────── -->
+    <div class="alert-banner" id="propped-alert-banner">
+      <div class="alert-banner-left">
+        <span class="status-dot led-bulb-amber"></span>
+        <div class="alert-banner-text">
+          <strong>Extended Open Duration Detected: </strong>
+          <span id="propped-alert-text"></span>
+        </div>
+      </div>
+      <button class="alert-banner-btn" type="button" id="btn-focus-propped">Focus in 3D</button>
+    </div>
+
+    <!-- ── MAIN CONTENT ─────────────────────────────────────── -->
+    <main class="main-content" id="main-content">
+
+      <!-- ═══════════════════════════════════════════════════════
+           VIEW 1: DASHBOARD OVERVIEW (#/overview)
+           ═══════════════════════════════════════════════════════ -->
+      <section class="view active" id="view-overview" aria-label="Dashboard overview">
+
+        <!-- 4-Card Bento KPI Ribbon -->
+        <div class="grid-kpi">
+          <!-- Total Lockers -->
+          <div class="kpi-card">
+            <div class="kpi-head">
+              <span class="kpi-label">Total Lockers</span>
+              <span class="kpi-icon-pill">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+              </span>
+            </div>
+            <div class="kpi-body">
+              <span class="kpi-value" id="stat-total">0</span>
+              <span class="kpi-meta">Lockers</span>
+            </div>
+            <div class="kpi-footer">
+              <span>Registered lockers</span>
+              <a href="#/lockers" class="link">Manage →</a>
+            </div>
+          </div>
+
+          <!-- Online -->
+          <div class="kpi-card">
+            <div class="kpi-head">
+              <span class="kpi-label">Online</span>
+              <span class="status-dot led-bulb-green"></span>
+            </div>
+            <div class="kpi-body">
+              <span class="kpi-value kpi-value--green" id="stat-online">0</span>
+              <span class="kpi-meta" id="stat-online-pct">100% active</span>
+            </div>
+            <div class="kpi-footer">
+              <div class="kpi-progress-track">
+                <div class="kpi-progress-bar" id="stat-online-bar" style="width: 100%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Offline -->
+          <div class="kpi-card">
+            <div class="kpi-head">
+              <span class="kpi-label">Offline</span>
+              <span class="kpi-icon-pill" style="color: #F87171; background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.25);">
+                <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </span>
+            </div>
+            <div class="kpi-body">
+              <span class="kpi-value kpi-value--red" id="stat-offline">0</span>
+              <span class="kpi-meta" id="stat-avg-duration">Avg open: —</span>
+            </div>
+            <div class="kpi-footer">
+              <span>Disconnected lockers</span>
+            </div>
+          </div>
+
+          <!-- Open Right Now -->
+          <div class="kpi-card">
+            <div class="kpi-head">
+              <span class="kpi-label">Open Right Now</span>
+              <span class="status-dot led-bulb-off" id="stat-open-dot"></span>
+            </div>
+            <div class="kpi-body">
+              <span class="kpi-value" id="stat-open">0</span>
+              <span class="kpi-meta" id="stat-open-note">All doors secured</span>
+            </div>
+            <div class="kpi-footer">
+              <span>Currently open</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Split: Interactive 3D Locker Array (Left) + Open Now / Recent Activity / Distribution (Right) -->
+        <div class="grid-dashboard-split">
+
+          <!-- 3D SPATIAL LOCKER ARRAY VIEWPORT -->
+          <div class="iot-card three-viewport-card">
+            <!-- 3D Toolbar Controls -->
+            <div class="three-toolbar">
+              <div class="three-title-group">
+                <span class="status-dot" style="background: var(--color-brand); box-shadow: 0 0 8px var(--color-brand);"></span>
+                <h2 class="three-title">Smart Locker</h2>
+                <span class="three-hint-tag">Drag to Orbit • Double-click for Details</span>
+              </div>
+
+              <!-- Camera Presets (Front View, Isometric, Top View, Orbit - NO Sensors) -->
+              <div class="three-controls-group">
+                <button type="button" class="cam-btn active" data-cam="front" id="btn-cam-front">Front View</button>
+                <button type="button" class="cam-btn" data-cam="iso" id="btn-cam-iso">Isometric</button>
+                <button type="button" class="cam-btn" data-cam="top" id="btn-cam-top">Top View</button>
+                <button type="button" class="cam-btn" id="btn-toggle-orbit">Orbit</button>
+              </div>
+            </div>
+
+            <!-- 3D Stage -->
+            <div class="three-stage-wrapper" id="three-stage-wrapper">
+              <div class="three-canvas-container" id="three-canvas-container"></div>
+
+              <!-- Floating Status Indicator Legend Overlay -->
+              <div class="three-legend-box">
+                <div class="three-legend-heading">Status Indicator</div>
+                <div class="three-legend-item">
+                  <span class="status-dot led-bulb-green"></span>
+                  <span>Green: Locker CLOSED</span>
+                </div>
+                <div class="three-legend-item">
+                  <span class="status-dot led-bulb-red"></span>
+                  <span>Red: Locker OPEN</span>
+                </div>
+                <div class="three-legend-item">
+                  <span class="status-dot led-bulb-off"></span>
+                  <span>Unassigned Slot</span>
+                </div>
+              </div>
+
+              <!-- Floating 3D Hover Tooltip -->
+              <div class="three-tooltip" id="three-tooltip" hidden>
+                <div class="three-tooltip-header">
+                  <span class="three-tooltip-id" id="tt-id">Locker-01</span>
+                  <span id="tt-conn" class="status-dot-label status-dot-label--online">ONLINE</span>
+                </div>
+                <div class="three-tooltip-body">
+                  <div class="three-tooltip-row">
+                    <span class="three-tooltip-label">Door State:</span>
+                    <span class="three-tooltip-val" id="tt-state">CLOSED</span>
+                  </div>
+                  <div class="three-tooltip-row">
+                    <span class="three-tooltip-label">Sensor:</span>
+                    <span class="three-tooltip-val" id="tt-reed">Contact</span>
+                  </div>
+                  <div class="three-tooltip-row">
+                    <span class="three-tooltip-label">Latch:</span>
+                    <span class="three-tooltip-val" id="tt-micro">Pressed</span>
+                  </div>
+                  <div class="three-tooltip-row">
+                    <span class="three-tooltip-label">Timer / Last:</span>
+                    <span class="three-tooltip-val" id="tt-timer">00:00</span>
+                  </div>
+                </div>
+                <div class="three-tooltip-footer">
+                  <span>Double-click details →</span>
+                </div>
+              </div>
+
+              <!-- Floating Quick-Action Bar -->
+              <div class="three-quick-bar" id="three-quick-bar">
+                <div class="three-quick-label">Locker Unit:</div>
+                <div class="three-quick-pills" id="quick-locker-pills"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN STACK: LIVE OPEN TIMERS + RECENT ACTIVITY + ACTIVITY DISTRIBUTION -->
+          <div class="stack-column">
+
+            <!-- Open Now (Live Timers) -->
+            <div class="iot-card card-padding">
+              <div class="card-title" style="margin-bottom: var(--space-3);">
+                <span class="status-dot led-bulb-green"></span>
+                <span>Open Now (Live Timers)</span>
+              </div>
+              <ul class="open-now-list" id="overview-open-list"></ul>
+            </div>
+
+            <!-- Recent Activity Stream -->
+            <div class="table-wrapper">
+              <div class="table-head">
+                <div class="table-title-group">
+                  <h3 class="table-title">Recent Activity Stream</h3>
+                  <span class="table-subtitle">Real-time open and close records</span>
+                </div>
+                <a href="#/logs" class="link" style="font-size: var(--text-xs); font-family: var(--font-mono);">View all →</a>
+              </div>
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Locker</th>
+                      <th scope="col">Opened</th>
+                      <th scope="col" class="text-right">Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody id="overview-recent-body"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Activity Distribution by Unit -->
+            <div class="iot-card card-padding">
+              <div class="kpi-head" style="margin-bottom: var(--space-3);">
+                <div class="card-title">
+                  <span>Activity Distribution by Unit</span>
+                </div>
+                <span class="kpi-meta" id="chart-total-sessions">0 sessions</span>
+              </div>
+              <div class="utilization-list" id="overview-utilization-bars"></div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+           VIEW 2: MANAGE LOCKERS (#/lockers)
+           ═══════════════════════════════════════════════════════ -->
+      <section class="view" id="view-lockers" aria-label="Manage lockers">
+
+        <!-- Filter & Search Toolbar -->
+        <div class="filter-toolbar">
+          <div class="filter-group">
+            <div class="search-box">
+              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input type="text" class="search-input" id="locker-search-input" placeholder="Search locker ID (e.g. Locker-01)..." />
+            </div>
+
+            <div class="pill-group" id="locker-status-pills">
+              <button type="button" class="filter-pill-btn active" data-status-filter="ALL">All</button>
+              <button type="button" class="filter-pill-btn" data-status-filter="ONLINE">Online</button>
+              <button type="button" class="filter-pill-btn" data-status-filter="OFFLINE">Offline</button>
+              <button type="button" class="filter-pill-btn" data-status-filter="OPEN">Open</button>
+              <button type="button" class="filter-pill-btn" data-status-filter="CLOSED">Closed</button>
+            </div>
+          </div>
+
+          <div style="font-size: var(--text-xs); font-family: var(--font-mono); color: var(--color-text-secondary);">
+            Registered: <span class="table-count-badge" id="lockers-count">0</span>
+          </div>
+        </div>
+
+        <!-- Registered Lockers Table -->
+        <div class="table-wrapper">
+          <div class="table-head">
+            <div class="table-title-group">
+              <h2 class="table-title">Registered Lockers</h2>
+              <span class="table-subtitle">Live synchronization with ESP32 hardware fleet</span>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Locker</th>
+                  <th scope="col">Connection</th>
+                  <th scope="col">Door State</th>
+                  <th scope="col">Last State Change</th>
+                  <th scope="col" class="text-right">Quick Actions</th>
+                </tr>
+              </thead>
+              <tbody id="lockers-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+           VIEW 3: LOCKER DETAILS (#/lockers/<id>)
+           ═══════════════════════════════════════════════════════ -->
+      <section class="view" id="view-locker" aria-label="Locker details">
+
+        <!-- Top Navigation -->
+        <a class="back-link" href="#/lockers">
+          <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+          Back to Manage Lockers
+        </a>
+
+        <p class="empty-state" id="detail-message">Loading locker telemetry…</p>
+
+        <div class="stack-column" id="detail-content" hidden>
+
+          <!-- Locker Header Banner Card -->
+          <div class="iot-card detail-header-card">
+            <div class="detail-header-left">
+              <div class="detail-led-avatar" id="detail-led-avatar">
+                <span class="status-dot led-bulb-green" style="width: 14px; height: 14px;"></span>
+              </div>
+              <div class="detail-title-group">
+                <div class="detail-title-row">
+                  <h2 class="detail-title" id="detail-name">Locker-01</h2>
+                  <div id="detail-badges"></div>
+                </div>
+                <div class="detail-db-path" id="detail-db-path">lockers/Locker-01</div>
+              </div>
+            </div>
+
+            <div class="detail-readouts">
+              <div class="detail-readout-col">
+                <span class="detail-readout-label">Current State</span>
+                <div id="detail-state"></div>
+              </div>
+              <div class="detail-readout-divider"></div>
+              <div class="detail-readout-col">
+                <span class="detail-readout-label">Live Open Timer</span>
+                <div id="detail-timer" role="timer"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Split: Single 3D Unit Inspector & Hardware Sensor Telemetry -->
+          <div class="grid-detail-split">
+
+            <!-- Left: Single-Unit 3D Smart Locker (Fixed View-Only Digital Twin) -->
+            <div class="iot-card three-viewport-card">
+              <div class="card-header">
+                <div class="card-title">
+                  <span class="status-dot" style="background: var(--color-brand);"></span>
+                  <span>Smart Locker</span>
+                </div>
+              </div>
+              <div class="detail-three-stage" id="detail-stage-wrapper">
+                <div class="three-canvas-container" id="detail-three-container"></div>
+              </div>
+            </div>
+
+            <!-- Right: Hardware Pins, Sensors & Metadata -->
+            <div class="stack-column">
+
+              <!-- Sensor & Indicator Status Panel -->
+              <div class="iot-card card-padding">
+                <div class="card-title" style="margin-bottom: var(--space-1);">
+                  <span>Sensor &amp; Indicator Status</span>
+                </div>
+                <span class="card-subtitle">Dual-sensor door verification</span>
+
+                <div class="sensor-card-grid">
+                  <div class="sensor-box">
+                    <div class="sensor-box-top">
+                      <span class="sensor-pin">Sensor 1</span>
+                      <span class="badge" id="detail-reed-badge">—</span>
+                    </div>
+                    <span class="sensor-name">Magnetic Door Sensor</span>
+                  </div>
+
+                  <div class="sensor-box">
+                    <div class="sensor-box-top">
+                      <span class="sensor-pin">Sensor 2</span>
+                      <span class="badge" id="detail-micro-badge">—</span>
+                    </div>
+                    <span class="sensor-name">Physical Latch Switch</span>
+                  </div>
+                </div>
+
+                <div class="led-output-strip">
+                  <div class="led-indicator-row">
+                    <span class="status-dot led-bulb-off" id="detail-gpio18-bulb"></span>
+                    <div class="led-label-wrap">
+                      <span class="led-pin-title">Red Indicator</span>
+                      <span class="led-pin-sub" id="detail-gpio18-text">Off</span>
+                    </div>
+                  </div>
+
+                  <div class="led-indicator-row">
+                    <span class="status-dot led-bulb-off" id="detail-gpio19-bulb"></span>
+                    <div class="led-label-wrap">
+                      <span class="led-pin-title">Green Indicator</span>
+                      <span class="led-pin-sub" id="detail-gpio19-text">Off</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Locker Information Grid -->
+              <div class="iot-card card-padding">
+                <div class="card-title" style="margin-bottom: var(--space-3);">
+                  <span>Locker Details &amp; Information</span>
+                </div>
+                <dl class="meta-grid" id="detail-info"></dl>
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- Unit Activity History Table -->
+          <div class="table-wrapper">
+            <div class="table-head">
+              <div class="table-title-group">
+                <h3 class="table-title">Unit Activity History</h3>
+                <span class="table-subtitle">Recorded open &amp; close sessions for this locker</span>
+              </div>
+              <span class="table-count-badge" id="detail-history-count">0 records</span>
+            </div>
+
+            <!-- Date Range Filter Bar for Unit Activity History -->
+            <div class="table-filter-bar" id="detail-filter-bar">
+              <div class="table-filter-left">
+                <div class="pill-group" id="detail-filter-pills" role="group" aria-label="Date range filters">
+                  <button type="button" class="filter-pill-btn active" data-range="all">All Time</button>
+                  <button type="button" class="filter-pill-btn" data-range="today">Today</button>
+                  <button type="button" class="filter-pill-btn" data-range="7d">Last 7 Days</button>
+                  <button type="button" class="filter-pill-btn" data-range="30d">Last 30 Days</button>
+                  <button type="button" class="filter-pill-btn" data-range="custom">Custom Range</button>
+                </div>
+
+                <div class="detail-custom-dates" id="detail-custom-dates" hidden>
+                  <div class="custom-date-item">
+                    <label for="detail-filter-from" class="custom-date-label">From</label>
+                    <input type="date" id="detail-filter-from" class="date-input-sm" />
+                  </div>
+                  <div class="custom-date-item">
+                    <label for="detail-filter-to" class="custom-date-label">To</label>
+                    <input type="date" id="detail-filter-to" class="date-input-sm" />
+                  </div>
+                </div>
+              </div>
+
+              <button type="button" class="btn-reset-filter" id="detail-btn-reset" title="Reset filters to All Time">
+                <svg viewBox="0 0 24 24" aria-hidden="true" style="width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2;">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                  <path d="M3 3v5h5"/>
+                </svg>
+                <span>Reset Filters</span>
+              </button>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Session Status</th>
+                    <th scope="col">Opened Timestamp</th>
+                    <th scope="col">Closed Timestamp</th>
+                    <th scope="col" class="text-right">Duration</th>
+                  </tr>
+                </thead>
+                <tbody id="detail-activity-body"></tbody>
+              </table>
+            </div>
+
+            <!-- Table Footer & Pagination -->
+            <div class="table-footer">
+              <span class="table-footer-info" id="detail-history-footer-info">Showing 0 records</span>
+              <nav class="pagination" id="detail-pagination-container" aria-label="Pagination"></nav>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+           VIEW 4: ACTIVITY LOGS (#/logs)
+           ═══════════════════════════════════════════════════════ -->
+      <section class="view" id="view-logs" aria-label="Activity logs">
+
+        <!-- Filter & Export Toolbar -->
+        <div class="filter-toolbar">
+          <div class="filter-group">
+            <!-- 1. Expandable Search Icon / Input -->
+            <div class="expandable-search" id="logs-search-wrap">
+              <button type="button" class="expandable-search__btn" id="logs-search-toggle" aria-label="Search locker ID" title="Search locker ID">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+              </button>
+              <input
+                type="text"
+                id="filter-search-locker"
+                class="expandable-search__input"
+                placeholder="Search locker ID..."
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button type="button" class="expandable-search__clear" id="logs-search-clear" aria-label="Clear search" title="Clear search" hidden>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+
+            <!-- 2. Session State Dropdown -->
+            <div class="form-control-wrap">
+              <label for="filter-state" class="form-label">Session State</label>
+              <select class="select-input" id="filter-state">
+                <option value="">All sessions</option>
+                <option value="OPEN">Open (In Progress)</option>
+                <option value="CLOSED">Completed (Closed)</option>
+                <option value="DISCONNECTED">Disconnected</option>
+              </select>
+            </div>
+
+            <!-- 3. Date Dropdown -->
+            <div class="form-control-wrap">
+              <label for="filter-date-range" class="form-label">Date</label>
+              <select class="select-input" id="filter-date-range">
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="30d">Last 30 Days</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+
+            <!-- 3b. Custom Date Range Pickers (revealed when Custom Range is active) -->
+            <div class="custom-date-range-wrap" id="logs-custom-dates" hidden>
+              <div class="form-control-wrap">
+                <label for="filter-date-from" class="form-label">From</label>
+                <input class="date-input" type="date" id="filter-date-from" />
+              </div>
+              <span class="custom-date-sep">to</span>
+              <div class="form-control-wrap">
+                <label for="filter-date-to" class="form-label">To</label>
+                <input class="date-input" type="date" id="filter-date-to" />
+              </div>
+            </div>
+
+            <!-- 4. Reset Filters Button -->
+            <button class="btn btn--ghost btn--filter-reset" type="button" id="btn-clear-filters" title="Reset all filters">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+              <span>Reset Filters</span>
+            </button>
+          </div>
+
+          <button class="btn btn--ghost" type="button" id="btn-export-csv">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span>Export CSV</span>
+          </button>
+        </div>
+
+        <!-- Activity Records Table -->
+        <div class="table-wrapper">
+          <div class="table-head">
+            <div class="table-title-group">
+              <div style="display: flex; align-items: center; gap: var(--space-3);">
+                <h2 class="table-title">Activity Records</h2>
+                <span class="table-count-badge" id="logs-count">0</span>
+              </div>
+              <span class="table-subtitle" id="logs-summary-metrics">Real-time database activity log telemetry</span>
+            </div>
+          </div>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Locker ID</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Opened At</th>
+                  <th scope="col">Closed At</th>
+                  <th scope="col" class="text-right">Duration</th>
+                </tr>
+              </thead>
+              <tbody id="logs-body"></tbody>
+            </table>
+          </div>
+
+          <!-- Table Footer & Pagination -->
+          <div class="table-footer">
+            <span class="table-footer-info" id="logs-footer-info">Showing 0 records</span>
+            <nav class="pagination" id="pagination-container" aria-label="Pagination"></nav>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
